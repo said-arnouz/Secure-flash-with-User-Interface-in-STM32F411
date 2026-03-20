@@ -1,0 +1,20 @@
+/*
+ * lzss.h
+ *
+ *  Created on: Mar 15, 2026
+ *      Author: HP
+ */
+
+#ifndef INC_LZSS_H_
+#define INC_LZSS_H_
+
+#include "stm32f4xx_hal.h"
+
+uint8_t LZSS_DecompressToFlash(UART_HandleTypeDef *huart,
+                                uint32_t original_size,
+                                uint32_t flash_address,
+                                uint8_t *iv,
+                                uint8_t *tag);
+
+
+#endif /* INC_LZSS_H_ */

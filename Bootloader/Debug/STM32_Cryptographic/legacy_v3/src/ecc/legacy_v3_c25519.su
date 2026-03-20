@@ -1,0 +1,2 @@
+legacy_v3_c25519.c:25:9:C25519keyExchange	640	static
+legacy_v3_c25519.c:55:9:C25519keyGen	64	static

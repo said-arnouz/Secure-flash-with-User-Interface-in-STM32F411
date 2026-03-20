@@ -1,0 +1,4 @@
+legacy_v3_ed25519.c:25:16:cmox_helper_ed25519_rv_convert	24	static
+legacy_v3_ed25519.c:49:9:ED25519keyGen	672	static
+legacy_v3_ed25519.c:76:9:ED25519sign	784	static
+legacy_v3_ed25519.c:106:9:ED25519verify	1168	static

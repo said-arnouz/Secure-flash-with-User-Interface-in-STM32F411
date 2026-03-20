@@ -1,0 +1,61 @@
+/*
+ * lzss.c
+ *
+ *  Created on: Mar 15, 2026
+ *      Author: HP
+ *
+ * LZSS decompression — mirrors compress.py lzss_decompress() exactly
+ */
+
+#include "lzss.h"
+
+#define LZSS_MIN_MATCH  3
+
+uint32_t LZSS_Decompress(const uint8_t *src, uint32_t src_len,
+                               uint8_t *dst, uint32_t original_size)
+{
+    uint32_t out_pos  = 0;   /* output index        */
+    uint32_t i        = 0;   /* input index         */
+    uint8_t  bit_buf  = 0;
+    uint8_t  bit_pos  = 0;   /* bits left in bit_buf */
+
+    while (out_pos < original_size)
+    {
+        /* Refill bit buffer */
+        if (bit_pos == 0)
+        {
+            if (i >= src_len) break;
+            bit_buf = src[i++];
+            bit_pos = 8;
+        }
+
+        /* Read 1 flag bit MSB first */
+        uint8_t flag = (bit_buf >> 7) & 1;
+        bit_buf      = (bit_buf << 1) & 0xFF;
+        bit_pos--;
+
+        if (flag == 0)
+        {
+            /* Literal — copy next byte directly */
+            if (i >= src_len) break;
+            dst[out_pos++] = src[i++];
+        }
+        else
+        {
+            /* Back-reference — next 2 bytes = offset + length */
+            if (i + 1 >= src_len) break;
+            uint8_t offset_val = src[i++];
+            uint8_t length_val = src[i++];
+
+            uint32_t offset = (uint32_t)offset_val + 1;
+            uint32_t length = (uint32_t)length_val + LZSS_MIN_MATCH;
+
+            /* Copy from already decompressed output */
+            uint32_t start = out_pos - offset;
+            for (uint32_t k = 0; k < length && out_pos < original_size; k++)
+                dst[out_pos++] = dst[start + k];
+        }
+    }
+
+    return out_pos;   /* actual decompressed size */
+}

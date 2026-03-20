@@ -1,0 +1,19 @@
+/*
+ * AES_GCM.c
+ *
+ *  Created on: 16 mar. 2026
+ *      Author: HP
+ */
+
+
+uint8_t Boot_Decrypt(UART_HandleTypeDef *huart,
+		uin8_t iv,
+		uin8_t tag,
+		uint32_t original_size,
+		uint32_t address)
+{
+
+uint8_t buff[]
+UART_ReadExact(huart, uint8_t *buf, uint32_t len)
+
+}

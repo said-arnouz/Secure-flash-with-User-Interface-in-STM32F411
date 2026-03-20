@@ -1,0 +1,119 @@
+/*
+ * lzss.c
+ *
+ *  Created on: Mar 15, 2026
+ *      Author: HP
+ *
+ * LZSS decompression — mirrors compress.py lzss_decompress() exactly
+ */
+
+#include "lzss.h"
+#include "flash_if.h"
+
+/* ================= DEFINES ================= */
+#define LZSS_MIN_MATCH   3
+#define LZSS_WINDOW_SIZE 256
+#define LZSS_OUT_BUF     128
+
+/* ================= STREAMING DECOMPRESS ================= */
+uint8_t LZSS_DecompressToFlash(UART_HandleTypeDef *huart,
+                                uint32_t            original_size,
+                                uint32_t            flash_address)
+{
+    /* ---- RAM: only 387 bytes total ---- */
+    uint8_t  window[LZSS_WINDOW_SIZE];   /* 256B sliding window            */
+    uint8_t  out_buf[LZSS_OUT_BUF];      /* 128B output chunk for flash    */
+    uint8_t  bit_buf  = 0;               /* current byte of flag bits      */
+    uint8_t  bit_pos  = 0;               /* how many bits left in bit_buf  */
+    uint32_t win_pos  = 0;               /* current position in window     */
+    uint32_t out_pos  = 0;               /* bytes written to out_buf       */
+    uint32_t total    = 0;               /* total decompressed bytes so far */
+    uint8_t  rx_byte;                    /* single UART byte               */
+
+    memset(window, 0xFF, LZSS_WINDOW_SIZE);
+
+    while (total < original_size)
+    {
+        /* --- Refill bit buffer from UART --- */
+        if (bit_pos == 0)
+        {
+            if (HAL_UART_Receive(huart, &bit_buf, 1, HAL_MAX_DELAY) != HAL_OK)
+                return 0;
+            bit_pos = 8;
+        }
+
+        /* --- Read 1 flag bit MSB first --- */
+        uint8_t flag = (bit_buf >> 7) & 1;
+        bit_buf      = (bit_buf << 1) & 0xFF;
+        bit_pos--;
+
+        if (flag == 0)
+        {
+            /* ---- LITERAL: read 1 byte from UART ---- */
+            if (HAL_UART_Receive(huart, &rx_byte, 1, HAL_MAX_DELAY) != HAL_OK)
+                return 0;
+
+            window[win_pos]        = rx_byte;
+            out_buf[out_pos++]     = rx_byte;
+            win_pos                = (win_pos + 1) % LZSS_WINDOW_SIZE;
+            total++;
+        }
+        else
+        {
+            /* ---- BACK-REFERENCE: read 2 bytes ---- */
+            uint8_t offset_val, length_val;
+            if (HAL_UART_Receive(huart, &offset_val, 1, HAL_MAX_DELAY) != HAL_OK)
+                return 0;
+            if (HAL_UART_Receive(huart, &length_val, 1, HAL_MAX_DELAY) != HAL_OK)
+                return 0;
+
+            uint32_t offset = (uint32_t)offset_val + 1;
+            uint32_t length = (uint32_t)length_val + LZSS_MIN_MATCH;
+
+            for (uint32_t k = 0; k < length && total < original_size; k++)
+            {
+                /* Copy from window */
+                uint32_t src_pos = (win_pos - offset + LZSS_WINDOW_SIZE)
+                                    % LZSS_WINDOW_SIZE;
+                rx_byte              = window[src_pos];
+                window[win_pos]      = rx_byte;
+                out_buf[out_pos++]   = rx_byte;
+                win_pos              = (win_pos + 1) % LZSS_WINDOW_SIZE;
+                total++;
+
+                /* Flush out_buf to flash when full */
+                if (out_pos == LZSS_OUT_BUF)
+                {
+                    uint32_t aligned = (out_pos + 3U) & ~3U;
+                    if (Flash_Write(flash_address, out_buf, aligned) != FLASH_OK)
+                        return 0;
+                    flash_address += aligned;
+                    out_pos        = 0;
+                    memset(out_buf, 0xFF, LZSS_OUT_BUF);
+                }
+            }
+            continue;   /* skip flush check below — already handled above */
+        }
+
+        /* Flush out_buf to flash when full (literal path) */
+        if (out_pos == LZSS_OUT_BUF)
+        {
+            uint32_t aligned = (out_pos + 3U) & ~3U;
+            if (Flash_Write(flash_address, out_buf, aligned) != FLASH_OK)
+                return 0;
+            flash_address += aligned;
+            out_pos        = 0;
+            memset(out_buf, 0xFF, LZSS_OUT_BUF);
+        }
+    }
+
+    /* Flush remaining bytes to flash */
+    if (out_pos > 0)
+    {
+        uint32_t aligned = (out_pos + 3U) & ~3U;
+        if (Flash_Write(flash_address, out_buf, aligned) != FLASH_OK)
+            return 0;
+    }
+
+    return 1;
+}

@@ -1,0 +1,32 @@
+/*
+ * lzss.h
+ *
+ *  Created on: Mar 15, 2026
+ *      Author: HP
+ */
+
+#ifndef INC_LZSS_AES_GCM_H_
+#define INC_LZSS_AES_GCM_H_
+
+#include "stm32f4xx_hal.h"
+/* CMOX direct API — no legacy wrapper needed */
+#include "cmox_crypto.h"
+#include "cmox_gcm.h"
+#include "legacy_v3_aes_gcm.h"
+#include "err_codes.h"
+
+static const uint8_t AES_KEY[32] = {
+    0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
+    0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C,
+    0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
+    0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C
+};
+
+uint8_t Decrypt_DecomprToFlash(UART_HandleTypeDef 	*huart,
+                                uint32_t 			original_size,
+                                uint32_t 			flash_address,
+                                uint8_t 			*iv,
+                                uint8_t 			*tag);
+
+
+#endif /* INC_LZSS_AES_GCM_H_ */

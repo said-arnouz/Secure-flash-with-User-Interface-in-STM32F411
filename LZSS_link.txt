@@ -1,0 +1,45 @@
+https://go-compression.github.io/algorithms/lzss/
+
+Exemple of LZSS :
+Original firmware (8 bytes):
+  0x08 0x20 0x00 0x20 0x08 0x20 0x00 0x20
+bytes 0-3: makinaxh ta repetetion so it"s Leteral
+bytes 4-7: kayna repetetion dyal 0-3 so Back-reference
+
+8 symbols:
+  sym1: literal  0x08    → flag=0
+  sym2: literal  0x20    → flag=0
+  sym3: literal  0x00    → flag=0
+  sym4: literal  0x20    → flag=0
+  sym5: backref (4,4)    → flag=1
+  sym6: padding  0x00    → flag=0 
+  sym7: padding  0x00    → flag=0
+  sym8: padding  0x00    → flag=0
+
+flags byte = 0b00001000 = 0x08
+
+Compressed bytes من UART:
+[0x08] [0x08] [0x20] [0x00] [0x20] [0x03] [0x01] 
+  ↑      ↑      ↑      ↑      ↑      ↑      ↑        
+flags  lit1   lit2   lit3   lit4  offset length      
+
+Read_Byte → 0x08 → bit_buf=0b00001000, bit_pos=8
+
+bit7=0 → LITERAL
+  Read_Byte → 0x08 → flashih 
+
+bit6=0 → LITERAL
+  Read_Byte → 0x20 → flashih 
+
+bit5=0 → LITERAL
+  Read_Byte → 0x00 → flashih 
+
+bit4=0 → LITERAL
+  Read_Byte → 0x20 → flashih 
+
+bit3=1 → BACK-REFERENCE
+  Read_Byte → 0x03 → offset = 3+1 = 4
+  Read_Byte → 0x01 → length = 1+3 = 4
+  copy 4 bytes man window → Flashihom
+
+bit2=0 → padding (total==original_size → khraj man loop)

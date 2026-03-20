@@ -1,0 +1,5 @@
+legacy_v3_ctr_drbg.c:44:9:RNGinit	56	static
+legacy_v3_ctr_drbg.c:79:9:RNGfree	24	static
+legacy_v3_ctr_drbg.c:99:9:RNGreseed	40	static
+legacy_v3_ctr_drbg.c:135:9:RNGgenBytes	40	static
+legacy_v3_ctr_drbg.c:175:9:RNGgenWords	40	static

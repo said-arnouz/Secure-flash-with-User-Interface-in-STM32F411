@@ -1,0 +1,6 @@
+legacy_v3_rsa.c:34:16:cmox_helper_rsa_rv_convert	24	static
+legacy_v3_rsa.c:70:33:rsa_hash_map	24	static
+legacy_v3_rsa.c:100:9:RSA_PKCS1v15_Sign	144	static
+legacy_v3_rsa.c:147:9:RSA_PKCS1v15_Verify	152	static
+legacy_v3_rsa.c:197:9:RSA_PKCS1v15_Encrypt	160	static
+legacy_v3_rsa.c:263:9:RSA_PKCS1v15_Decrypt	144	static

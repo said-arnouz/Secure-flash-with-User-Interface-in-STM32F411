@@ -86,7 +86,7 @@ python sigma_gui.py
 ---
 
 ## UART Protocol
-![Host ↔ STM32 Flow](images/3.PNG)
+![Host ↔ STM32 Flow](images/3.png)
 ```
 Host → STM32:
 
@@ -107,7 +107,7 @@ STM32 → Host:
 ---
 
 ## Cryptographic Details
-![LZSS Algorithm](images/2.PNG)
+![LZSS Algorithm](images/2.png)
 | Algorithm | Details |
 |-----------|---------|
 | Compression | LZSS — window 256B, min match 3B |

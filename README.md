@@ -85,7 +85,7 @@ python sigma_gui.py
 
 ---
 
-## UART Protocol
+## Flow of this project
 ![Host ↔ STM32 Flow](images/3.png)
 ```
 Host → STM32:
@@ -106,7 +106,7 @@ STM32 → Host:
 
 ---
 
-## Cryptographic Details
+## LZSS Algo Details
 ![LZSS Algorithm](images/2.png)
 | Algorithm | Details |
 |-----------|---------|

@@ -13,8 +13,10 @@
 #include "stm32f4xx_hal.h"
 #include "uECC.h"
 
+/* ================= MEMORY MAP ================= */
 #define APP_ADDRESS     0x08020000UL    /**< Start address of application in flash */
 
+/* ================= PROTOCOL ================= */
 #define MAX_CHUNK       128U            /**< Maximum UART chunk size in bytes */
 #define BOOT_ACK        0x79            /**< ACK byte sent to host */
 #define BOOT_ERR        0x1F            /**< ERR byte sent to host on failure */
@@ -23,6 +25,7 @@
 #define TAG_SIZE        16U             /**< AES-GCM authentication tag size in bytes */
 #define IV_SIZE         12U             /**< AES-GCM initialization vector size in bytes */
 
+/* ================= STATUS ================= */
 /**
  * @brief Flash operation status codes.
  */
@@ -31,6 +34,7 @@ typedef enum {
     FLASH_ERROR = 1     /**< Operation failed */
 } FLASH_Status_t;
 
+/* ================= FLASH API ================= */
 /**
  * @brief Erase flash sectors starting from start_address to end of flash.
  * @param start_address : first address to erase.
@@ -56,7 +60,7 @@ FLASH_Status_t Flash_Write (uint32_t address, uint8_t *data, uint32_t length);
  */
 FLASH_Status_t Flash_Read  (uint32_t address, uint8_t *data, uint32_t length);
 
-/* UART */
+/* ================= UART ================= */
 /**
  * @brief Receive exactly len bytes from UART (blocking).
  * @param huart : pointer to UART handle.
@@ -78,6 +82,7 @@ void Boot_SendAck (UART_HandleTypeDef *huart);
  */
 void Boot_SendErr (UART_HandleTypeDef *huart);
 
+/* ================= BOOT PROTOCOL ================= */
 /**
  * @brief Handle firmware flash request from host.
  * @details Receives IV, Tag, original size, encrypted+compressed chunks,

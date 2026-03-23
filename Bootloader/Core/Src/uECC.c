@@ -1,15 +1,31 @@
-/*
- * uECC.c
- *
- *  Created on: Mar 5, 2026
- *      Author: HP
+/**
+ * @file    uECC.c
+ * @brief   ECDSA P-256 signature verification for STM32 bootloader.
+ *          Uses STM32 CMOX cryptographic library (SHA-256 + ECDSA P-256).
+ * @author  SAID ARNOUZ
+ * @date    2026
  */
 
 #include "uECC.h"
-/* ================= VERIFY SIGNATURE ================= */
+
+/**
+ * @brief  Verifies the ECDSA P-256 signature of the flashed application.
+ * @details Two-step process:
+ *          Step 1 : Compute SHA-256 digest of the flashed firmware
+ *                   directly from flash (memory-mapped, no copy needed).
+ *          Step 2 : Verify ECDSA P-256 signature against the digest
+ *                   using the embedded public key.
+ *          Double fault-injection check: both rv and fault_check
+ *          must equal CMOX_ECC_AUTH_SUCCESS.
+ *
+ * @param  app_address : start address of the flashed application in flash.
+ * @param  app_size    : size of the application in bytes (original, before compression).
+ * @param  signature   : pointer to 64-byte raw ECDSA signature (R || S, big-endian).
+ * @return 1 : signature valid.
+ *         0 : signature invalid or crypto error.
+ */
 uint8_t Boot_VerifySignature(uint32_t app_address, uint32_t app_size, const uint8_t *signature)
 {
-    /* --- Step 1: SHA-256 of flashed app in-place --- */
     uint8_t digest[32];
     size_t  digest_len = 0;
 
@@ -20,7 +36,6 @@ uint8_t Boot_VerifySignature(uint32_t app_address, uint32_t app_size, const uint
     if (cmox_hash_init(hash)           != CMOX_HASH_SUCCESS)  return 0;
     if (cmox_hash_setTagLen(hash, 32U) != CMOX_HASH_SUCCESS)  return 0;
 
-    /* Feed flash content directly — no copy needed, flash is memory-mapped */
     if (cmox_hash_append(hash, (const uint8_t *)app_address, (size_t)app_size)
         != CMOX_HASH_SUCCESS)
     {
@@ -35,10 +50,7 @@ uint8_t Boot_VerifySignature(uint32_t app_address, uint32_t app_size, const uint
     }
     cmox_hash_cleanup(hash);
 
-    /* --- Step 2: ECDSA P-256 verify --- */
-    /* Static working buffer — no heap needed */
     static uint8_t ecc_membuf[CMOX_ECC_MEMBUF_SIZE];
-
     cmox_ecc_handle_t ecc_ctx;
     cmox_ecc_construct(&ecc_ctx, CMOX_MATH_FUNCS_SMALL,
                        ecc_membuf, sizeof(ecc_membuf));
@@ -48,16 +60,15 @@ uint8_t Boot_VerifySignature(uint32_t app_address, uint32_t app_size, const uint
 
     rv = cmox_ecdsa_verify(
         &ecc_ctx,
-        CMOX_ECC_SECP256R1_LOWMEM,  /* P-256 curve, low RAM usage */
-        PUBLIC_KEY,   64U,          /* uncompressed X || Y        */
-        digest,       32U,          /* SHA-256 of flashed app     */
-        signature,    64U,          /* raw R || S from UART       */
+        CMOX_ECC_SECP256R1_LOWMEM,
+        PUBLIC_KEY,   64U,
+        digest,       32U,
+        signature,    64U,
         &fault_check
     );
 
     cmox_ecc_cleanup(&ecc_ctx);
 
-    /* Both rv AND fault_check must equal AUTH_SUCCESS — double check against fault injection */
     if ((rv == CMOX_ECC_AUTH_SUCCESS) && (fault_check == CMOX_ECC_AUTH_SUCCESS))
         return 1;
 

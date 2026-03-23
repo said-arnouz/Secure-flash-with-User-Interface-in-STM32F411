@@ -72,29 +72,8 @@ static int8_t Read_Byte(UART_HandleTypeDef *huart, uint8_t *out)
     *out = dec_buf[chunk_pos++];
     return 0;
 }
-/**
- * @brief   Decrypts (AES-256-GCM) and decompresses (LZSS) firmware received
- *          over UART, then writes it directly to flash memory.
- *
- * @details Full pipeline per chunk:
- *          1. Read encrypted chunk from UART (via Read_Byte / chunk protocol)
- *          2. AES-256-GCM decrypt chunk in-place using pre-initialized context
- *          3. Feed decrypted bytes into LZSS decompressor bit by bit
- *          4. Accumulate decompressed bytes in out_buf (128B)
- *          5. Flush out_buf to flash when full or at end
- *          6. After all chunks: verify AES-GCM authentication Tag
- *
- * @param   huart         : pointer to UART handle.
- * @param   original_size : size of the original firmware before compression (bytes).
- *                          Used by LZSS to know when decompression is complete.
- * @param   flash_address : start address in flash where firmware will be written.
- * @param   iv            : pointer to 12-byte AES-GCM Initialization Vector.
- * @param   tag           : pointer to 16-byte AES-GCM authentication Tag.
- *                          Verified at the end via ctx.pmTag.
- *
- * @return  1 : success — firmware decrypted, decompressed, written and Tag verified.
- *          0 : failure — Flash_Write error, AES error, or Tag mismatch.
- */uint8_t Decrypt_DecomprToFlash(UART_HandleTypeDef 	*huart,
+/*STREAMING DECOMPRESS TO FLASH */
+uint8_t Decrypt_DecomprToFlash(UART_HandleTypeDef 	*huart,
                                 uint32_t 			original_size,
                                 uint32_t 			flash_address,
                                 uint8_t 			*iv,

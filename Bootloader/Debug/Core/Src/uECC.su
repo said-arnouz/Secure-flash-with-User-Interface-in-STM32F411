@@ -1,1 +1,1 @@
-uECC.c:10:9:Boot_VerifySignature	256	static
+uECC.c:27:9:Boot_VerifySignature	256	static

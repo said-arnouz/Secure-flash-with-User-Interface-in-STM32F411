@@ -1,9 +1,8 @@
-/**
- * @file    flash_if.c
- * @brief   Bootloader flash interface implementation — UART protocol,
- *          flash erase/write/read, and secure boot flow for STM32F411.
- * @author  SAID ARNOUZ
- * @date    2026
+/*
+ * flash_if.c
+ *
+ *  Created on: Feb 9, 2026
+ *      Author: HP
  */
 
 #ifndef SRC_FLASH_IF_C_
@@ -13,15 +12,10 @@
 #include "stm32f4xx_hal.h"
 #include "flash_if.h"
 
-/* ACK and ERR constants used across all UART responses */
+/*GLOBALS */
 static const uint8_t ACK = BOOT_ACK;
 static const uint8_t ERR = BOOT_ERR;
-
-/**
- * @brief  Maps a flash address to its corresponding sector number.
- * @param  address : flash address to look up.
- * @return Sector number (FLASH_SECTOR_0 to FLASH_SECTOR_7).
- */
+/*INTERNAL HELPER */
 static uint32_t Flash_GetSector(uint32_t address)
 {
     if (address < 0x08004000) return FLASH_SECTOR_0;
@@ -33,14 +27,7 @@ static uint32_t Flash_GetSector(uint32_t address)
     if (address < 0x08060000) return FLASH_SECTOR_6;
     return FLASH_SECTOR_7;
 }
-
-/**
- * @brief  Receives exactly len bytes from UART (blocking).
- * @param  huart : pointer to UART handle.
- * @param  buf   : pointer to receive buffer.
- * @param  len   : number of bytes to receive.
- * @return number of bytes received.
- */
+/* UART */
 uint32_t UART_ReadExact(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len)
 {
     uint32_t received = 0;
@@ -52,42 +39,23 @@ uint32_t UART_ReadExact(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len)
     return received;
 }
 
-/**
- * @brief  Sends ACK byte (0x79) to host.
- * @param  huart : pointer to UART handle.
- */
 void Boot_SendAck(UART_HandleTypeDef *huart)
 {
     HAL_UART_Transmit(huart, (uint8_t*)&ACK, 1, HAL_MAX_DELAY);
 }
 
-/**
- * @brief  Sends ERR byte (0x1F) to host.
- * @param  huart : pointer to UART handle.
- */
 void Boot_SendErr(UART_HandleTypeDef *huart)
 {
     HAL_UART_Transmit(huart, (uint8_t*)&ERR, 1, HAL_MAX_DELAY);
 }
 
-/**
- * @brief  Handles the full secure firmware flash sequence.
- * @details UART protocol sequence:
- *          Step 1 : ACK for 'F' command
- *          Step 2 : Erase application flash sectors
- *          Step 3 : Receive AES-GCM IV (12 bytes)
- *          Step 4 : Receive AES-GCM Tag (16 bytes)
- *          Step 5 : Receive original firmware size (4 bytes)
- *          Step 6 : Decrypt + decompress chunks → write to flash
- *          Step 7 : Receive ECDSA P-256 signature (64 bytes)
- *          Step 8 : Verify signature against flashed content
- *          Step 9 : ACK and jump to application
- * @param  huart : pointer to UART handle.
- */
+/*BOOT HANDLE FLASH */
 void Boot_HandleFlash(UART_HandleTypeDef *huart)
 {
+    /* Step 1: ACK for 'F' command */
     Boot_SendAck(huart);
 
+    /* Step 2: Erase app flash sectors */
     if (Flash_Erase(APP_ADDRESS) != FLASH_OK)
     {
         Boot_SendErr(huart);
@@ -95,15 +63,16 @@ void Boot_HandleFlash(UART_HandleTypeDef *huart)
     }
     Boot_SendAck(huart);
 
+    /* Step 3: Receive IV (12 bytes) */
     uint8_t iv[IV_SIZE];
-    UART_ReadExact(huart, iv, IV_SIZE);
+    UART_ReadExact(huart,iv, IV_SIZE);
     Boot_SendAck(huart);
-
+    /* Step 4: Receive Tag (16 bytes) */
     uint8_t tag[TAG_SIZE];
-    UART_ReadExact(huart, tag, TAG_SIZE);
+    UART_ReadExact(huart,tag, TAG_SIZE);
     Boot_SendAck(huart);
-
-    uint8_t size_buf[4];
+    /* Step 5: Receive original size (4 bytes) */
+    uint8_t  size_buf[4];
     UART_ReadExact(huart, size_buf, 4);
     uint32_t original_size = (uint32_t)size_buf[0]
                            | (uint32_t)size_buf[1] << 8
@@ -111,16 +80,23 @@ void Boot_HandleFlash(UART_HandleTypeDef *huart)
                            | (uint32_t)size_buf[3] << 24;
     Boot_SendAck(huart);
 
+    /* Step 6: Stream decompress from UART directly to flash */
     if (!Decrypt_DecomprToFlash(huart, original_size, APP_ADDRESS, iv, tag))
     {
+
         Boot_SendErr(huart);
         Flash_Erase(APP_ADDRESS);
         return;
     }
 
+    /* Step 7: Receive 64-byte ECDSA signature */
     static uint8_t signature[SIG_SIZE];
     UART_ReadExact(huart, signature, SIG_SIZE);
-
+    /* DEBUG */
+    uint8_t dbg[4];
+    Flash_Read(APP_ADDRESS, dbg, 4);
+    HAL_UART_Transmit(huart, dbg, 4, 1000);
+    /* Step 8: Verify signature against decompressed flashed content */
     if (!Boot_VerifySignature(APP_ADDRESS, original_size, signature))
     {
         Flash_Erase(APP_ADDRESS);
@@ -128,20 +104,16 @@ void Boot_HandleFlash(UART_HandleTypeDef *huart)
         return;
     }
 
+    /* Step 9: Signature OK — ACK then jump */
     Boot_SendAck(huart);
     Boot_JumpToApplication(APP_ADDRESS);
 }
-
-/**
- * @brief  Erases all flash sectors from start_address to end of flash.
- * @param  start_address : first address to erase.
- * @return FLASH_OK on success, FLASH_ERROR on failure.
- */
+/* ERASE FLASH */
 FLASH_Status_t Flash_Erase(uint32_t start_address)
 {
     FLASH_EraseInitTypeDef erase_init;
     uint32_t first_sector = Flash_GetSector(start_address);
-    uint32_t last_sector  = FLASH_SECTOR_7;
+    uint32_t last_sector  = FLASH_SECTOR_7;  // erase until end of flash
     uint32_t nb_sectors   = last_sector - first_sector + 1;
     uint32_t sector_error = 0;
 
@@ -162,13 +134,7 @@ FLASH_Status_t Flash_Erase(uint32_t start_address)
     return FLASH_OK;
 }
 
-/**
- * @brief  Writes data to flash at the given address (4-byte word programming).
- * @param  address : destination flash address (must be 4-byte aligned).
- * @param  data    : pointer to data buffer.
- * @param  length  : number of bytes to write (must be 4-byte aligned).
- * @return FLASH_OK on success, FLASH_ERROR on failure.
- */
+/* WRITE FLASH */
 FLASH_Status_t Flash_Write(uint32_t address, uint8_t *data, uint32_t length)
 {
     if (!data) return FLASH_ERROR;
@@ -179,16 +145,20 @@ FLASH_Status_t Flash_Write(uint32_t address, uint8_t *data, uint32_t length)
     while (i < length)
     {
         uint32_t word = 0xFFFFFFFF;
+
+        // Copy up to 4 bytes into a 32-bit word
         for (uint8_t b = 0; b < 4 && i < length; b++, i++)
         {
             word &= ~(0xFF << (b * 8U));
             word |= data[i] << (b * 8U);
         }
+
         if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address, word) != HAL_OK)
         {
             HAL_FLASH_Lock();
             return FLASH_ERROR;
         }
+
         address += 4U;
     }
 
@@ -196,29 +166,20 @@ FLASH_Status_t Flash_Write(uint32_t address, uint8_t *data, uint32_t length)
     return FLASH_OK;
 }
 
-/**
- * @brief  Reads data from flash at the given address (memory-mapped access).
- * @param  address : source flash address.
- * @param  data    : pointer to output buffer.
- * @param  length  : number of bytes to read.
- * @return FLASH_OK always.
- */
+/* READ FLASH */
 FLASH_Status_t Flash_Read(uint32_t address, uint8_t *data, uint32_t length)
 {
     for (uint32_t i = 0; i < length; i++)
+    {
         data[i] = *((uint8_t *)address++);
+    }
     return FLASH_OK;
 }
+/* Jump to app function */
 
-/**
- * @brief  Jumps to the application at the given address.
- * @details Disables interrupts, resets peripherals, sets MSP,
- *          and calls the application Reset_Handler.
- * @param  app_address : start address of the application vector table.
- */
 typedef struct {
-    uint32_t  Initial_SP;
-    void     (*Reset_Handler)(void);
+    uint32_t     Initial_SP;
+    void        (*Reset_Handler)(void);
 } AppVecTable_t;
 
 void Boot_JumpToApplication(uint32_t app_address)
@@ -227,8 +188,9 @@ void Boot_JumpToApplication(uint32_t app_address)
 
     __disable_irq();
     SysTick->CTRL = 0;
-    HAL_RCC_DeInit();
+    HAL_RCC_DeInit();  // keep it — safer for different clock configs
 
+    // Clear all NVIC registers
     for (uint8_t i = 0; i < sizeof(NVIC->ICER)/sizeof(NVIC->ICER[0]); i++)
     {
         NVIC->ICER[i] = 0xFFFFFFFF;
@@ -239,5 +201,7 @@ void Boot_JumpToApplication(uint32_t app_address)
     __set_MSP(app->Initial_SP);
     app->Reset_Handler();
 }
+
+
 
 #endif /* SRC_FLASH_IF_C_ */

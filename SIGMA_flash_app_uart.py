@@ -4,8 +4,8 @@ import os
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives import hashes, serialization
-from compress import lzss_compress
-from encrypt import aes_gcm_encrypt
+from SIGMA_compress import lzss_compress
+from SIGMA_encrypt import aes_gcm_encrypt
 # ================= CONFIG =================
 PORT          = "COM4"
 BAUD          = 115200

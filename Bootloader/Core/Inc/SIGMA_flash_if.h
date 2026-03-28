@@ -1,0 +1,95 @@
+/**
+ * @file    SIGMA_flash_if.h
+ * @brief   Bootloader flash interface — protocol definitions, flash API,
+ *          UART helpers, and boot protocol for STM32F411.
+ * @author  SAID ARNOUZ
+ * @date    2026
+ */
+
+#ifndef INC_SIGMA_FLASH_IF_H_
+#define INC_SIGMA_FLASH_IF_H_
+
+#include <SIGMA_ECC.h>
+#include <SIGMA_lzss_aes_gcm.h>
+#include "stm32f4xx_hal.h"
+
+#define APP_ADDRESS     0x08020000UL    /**< Start address of application in flash */
+
+#define MAX_CHUNK       128U            /**< Maximum UART chunk size in bytes */
+#define BOOT_ACK        0x79            /**< ACK byte sent to host */
+#define BOOT_ERR        0x1F            /**< ERR byte sent to host on failure */
+#define END_MARKER      0xFFFF          /**< End-of-transfer marker sent by host */
+#define SIG_SIZE        64U             /**< ECDSA P-256 signature size (R||S) in bytes */
+#define TAG_SIZE        16U             /**< AES-GCM authentication tag size in bytes */
+#define IV_SIZE         12U             /**< AES-GCM initialization vector size in bytes */
+
+/**
+ * @brief Flash operation status codes.
+ */
+typedef enum {
+    FLASH_OK    = 0,    /**< Operation successful */
+    FLASH_ERROR = 1     /**< Operation failed */
+} FLASH_Status_t;
+
+/**
+ * @brief Erase flash sectors starting from start_address to end of flash.
+ * @param start_address : first address to erase.
+ * @return FLASH_OK or FLASH_ERROR.
+ */
+FLASH_Status_t SIGMA_Flash_Erase (uint32_t start_address);
+
+/**
+ * @brief Write data to flash at given address (4-byte aligned).
+ * @param address : destination flash address.
+ * @param data    : pointer to data buffer.
+ * @param length  : number of bytes to write (must be 4-byte aligned).
+ * @return FLASH_OK or FLASH_ERROR.
+ */
+FLASH_Status_t SIGMA_Flash_Write (uint32_t address, uint8_t *data, uint32_t length);
+
+/**
+ * @brief Read data from flash at given address.
+ * @param address : source flash address.
+ * @param data    : pointer to output buffer.
+ * @param length  : number of bytes to read.
+ * @return FLASH_OK or FLASH_ERROR.
+ */
+FLASH_Status_t SIGMA_Flash_Read  (uint32_t address, uint8_t *data, uint32_t length);
+
+/* UART */
+/**
+ * @brief Receive exactly len bytes from UART (blocking).
+ * @param huart : pointer to UART handle.
+ * @param buf   : pointer to receive buffer.
+ * @param len   : number of bytes to receive.
+ * @return number of bytes received.
+ */
+uint32_t SIGMA_UART_ReadExact (UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len);
+
+/**
+ * @brief Send ACK byte (0x79) to host.
+ * @param huart : pointer to UART handle.
+ */
+void SIGMA_Boot_SendAck (UART_HandleTypeDef *huart);
+
+/**
+ * @brief Send ERR byte (0x1F) to host.
+ * @param huart : pointer to UART handle.
+ */
+void SIGMA_Boot_SendErr (UART_HandleTypeDef *huart);
+
+/**
+ * @brief Handle firmware flash request from host.
+ * @details Receives IV, Tag, original size, encrypted+compressed chunks,
+ *          then decrypts, decompresses, writes to flash, and verifies ECDSA signature.
+ * @param huart : pointer to UART handle.
+ */
+void SIGMA_Boot_HandleFlash (UART_HandleTypeDef *huart);
+
+/**
+ * @brief Jump to application at given address.
+ * @param app_address : start address of the application (vector table).
+ */
+void SIGMA_Boot_JumpToApplication (uint32_t app_address);
+
+#endif /* INC_SIGMA_FLASH_IF_H_ */

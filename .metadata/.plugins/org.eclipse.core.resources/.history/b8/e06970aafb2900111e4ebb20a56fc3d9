@@ -1,0 +1,243 @@
+/**
+ * @file    SIGMA_flash_if.c
+ * @brief   Bootloader flash interface implementation — UART protocol,
+ *          flash erase/write/read, and secure boot flow for STM32F411.
+ * @author  SAID ARNOUZ
+ * @date    2026
+ */
+
+#ifndef SRC_FLASH_IF_C_
+#define SRC_FLASH_IF_C_
+
+#include <SIGMA_flash_if.h>
+#include "stdio.h"
+#include "stm32f4xx_hal.h"
+
+/* ACK and ERR constants used across all UART responses */
+static const uint8_t ACK = BOOT_ACK;
+static const uint8_t ERR = BOOT_ERR;
+
+/**
+ * @brief  Maps a flash address to its corresponding sector number.
+ * @param  address : flash address to look up.
+ * @return Sector number (FLASH_SECTOR_0 to FLASH_SECTOR_7).
+ */
+static uint32_t SIGMA_Flash_GetSector(uint32_t address)
+{
+    if (address < 0x08004000) return FLASH_SECTOR_0;
+    if (address < 0x08008000) return FLASH_SECTOR_1;
+    if (address < 0x0800C000) return FLASH_SECTOR_2;
+    if (address < 0x08010000) return FLASH_SECTOR_3;
+    if (address < 0x08020000) return FLASH_SECTOR_4;
+    if (address < 0x08040000) return FLASH_SECTOR_5;
+    if (address < 0x08060000) return FLASH_SECTOR_6;
+    return FLASH_SECTOR_7;
+}
+
+/**
+ * @brief  Receives exactly len bytes from UART (blocking).
+ * @param  huart : pointer to UART handle.
+ * @param  buf   : pointer to receive buffer.
+ * @param  len   : number of bytes to receive.
+ * @return number of bytes received.
+ */
+uint32_t SIGMA_UART_ReadExact(UART_HandleTypeDef *huart, uint8_t *buf, uint32_t len)
+{
+    uint32_t received = 0;
+    while (received < len)
+    {
+        if (HAL_UART_Receive(huart, &buf[received], 1, HAL_MAX_DELAY) == HAL_OK)
+            received++;
+    }
+    return received;
+}
+
+/**
+ * @brief  Sends ACK byte (0x79) to host.
+ * @param  huart : pointer to UART handle.
+ */
+void SIGMA_Boot_SendAck(UART_HandleTypeDef *huart)
+{
+    HAL_UART_Transmit(huart, (uint8_t*)&ACK, 1, HAL_MAX_DELAY);
+}
+
+/**
+ * @brief  Sends ERR byte (0x1F) to host.
+ * @param  huart : pointer to UART handle.
+ */
+void SIGMA_Boot_SendErr(UART_HandleTypeDef *huart)
+{
+    HAL_UART_Transmit(huart, (uint8_t*)&ERR, 1, HAL_MAX_DELAY);
+}
+
+/**
+ * @brief  Handles the full secure firmware flash sequence.
+ * @details UART protocol sequence:
+ *          Step 1 : ACK for 'F' command
+ *          Step 2 : Erase application flash sectors
+ *          Step 3 : Receive AES-GCM IV (12 bytes)
+ *          Step 4 : Receive AES-GCM Tag (16 bytes)
+ *          Step 5 : Receive original firmware size (4 bytes)
+ *          Step 6 : Decrypt + decompress chunks → write to flash
+ *          Step 7 : Receive ECDSA P-256 signature (64 bytes)
+ *          Step 8 : Verify signature against flashed content
+ *          Step 9 : ACK and jump to application
+ * @param  huart : pointer to UART handle.
+ */
+void SIGMA_Boot_HandleFlash(UART_HandleTypeDef *huart)
+{
+	SIGMA_Boot_SendAck(huart);
+
+    if (SIGMA_Flash_Erase(APP_ADDRESS) != FLASH_OK)
+    {
+    	SIGMA_Boot_SendErr(huart);
+        return;
+    }
+    SIGMA_Boot_SendAck(huart);
+
+    uint8_t iv[IV_SIZE];
+    SIGMA_UART_ReadExact(huart, iv, IV_SIZE);
+    SIGMA_Boot_SendAck(huart);
+
+    uint8_t tag[TAG_SIZE];
+    SIGMA_UART_ReadExact(huart, tag, TAG_SIZE);
+    SIGMA_Boot_SendAck(huart);
+
+    uint8_t size_buf[4];
+    SIGMA_UART_ReadExact(huart, size_buf, 4);
+    uint32_t original_size = (uint32_t)size_buf[0]
+                           | (uint32_t)size_buf[1] << 8
+                           | (uint32_t)size_buf[2] << 16
+                           | (uint32_t)size_buf[3] << 24;
+    SIGMA_Boot_SendAck(huart);
+
+    if (!SIGMA_Decrypt_DecomprToFlash(huart, original_size, APP_ADDRESS, iv, tag))
+    {
+    	SIGMA_Boot_SendErr(huart);
+        SIGMA_Flash_Erase(APP_ADDRESS);
+        return;
+    }
+
+    static uint8_t signature[SIG_SIZE];
+    UART_ReadExact(huart, signature, SIG_SIZE);
+
+    if (!SIGMA_Boot_VerifySignature(APP_ADDRESS, original_size, signature))
+    {
+    	SIGMA_Flash_Erase(APP_ADDRESS);
+        SIGMA_Boot_SendErr(huart);
+        return;
+    }
+
+    SIGMA_Boot_SendAck(huart);
+    SIGMA_Boot_JumpToApplication(APP_ADDRESS);
+}
+
+/**
+ * @brief  Erases all flash sectors from start_address to end of flash.
+ * @param  start_address : first address to erase.
+ * @return FLASH_OK on success, FLASH_ERROR on failure.
+ */
+FLASH_Status_t SIGMA_Flash_Erase(uint32_t start_address)
+{
+    FLASH_EraseInitTypeDef erase_init;
+    uint32_t first_sector = SIGMA_Flash_GetSector(start_address);
+    uint32_t last_sector  = FLASH_SECTOR_7;
+    uint32_t nb_sectors   = last_sector - first_sector + 1;
+    uint32_t sector_error = 0;
+
+    HAL_FLASH_Unlock();
+
+    erase_init.TypeErase    = FLASH_TYPEERASE_SECTORS;
+    erase_init.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+    erase_init.Sector       = first_sector;
+    erase_init.NbSectors    = nb_sectors;
+
+    if (HAL_FLASHEx_Erase(&erase_init, &sector_error) != HAL_OK)
+    {
+        HAL_FLASH_Lock();
+        return FLASH_ERROR;
+    }
+
+    HAL_FLASH_Lock();
+    return FLASH_OK;
+}
+
+/**
+ * @brief  Writes data to flash at the given address (4-byte word programming).
+ * @param  address : destination flash address (must be 4-byte aligned).
+ * @param  data    : pointer to data buffer.
+ * @param  length  : number of bytes to write (must be 4-byte aligned).
+ * @return FLASH_OK on success, FLASH_ERROR on failure.
+ */
+FLASH_Status_t SIGMA_Flash_Write(uint32_t address, uint8_t *data, uint32_t length)
+{
+    if (!data) return FLASH_ERROR;
+
+    HAL_FLASH_Unlock();
+
+    uint32_t i = 0;
+    while (i < length)
+    {
+        uint32_t word = 0xFFFFFFFF;
+        for (uint8_t b = 0; b < 4 && i < length; b++, i++)
+        {
+            word &= ~(0xFF << (b * 8U));
+            word |= data[i] << (b * 8U);
+        }
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address, word) != HAL_OK)
+        {
+            HAL_FLASH_Lock();
+            return FLASH_ERROR;
+        }
+        address += 4U;
+    }
+
+    HAL_FLASH_Lock();
+    return FLASH_OK;
+}
+
+/**
+ * @brief  Reads data from flash at the given address (memory-mapped access).
+ * @param  address : source flash address.
+ * @param  data    : pointer to output buffer.
+ * @param  length  : number of bytes to read.
+ * @return FLASH_OK always.
+ */
+FLASH_Status_t SIGMA_Flash_Read(uint32_t address, uint8_t *data, uint32_t length)
+{
+    for (uint32_t i = 0; i < length; i++)
+        data[i] = *((uint8_t *)address++);
+    return FLASH_OK;
+}
+
+/**
+ * @brief  Jumps to the application at the given address.
+ * @details Disables interrupts, resets peripherals, sets MSP,
+ *          and calls the application Reset_Handler.
+ * @param  app_address : start address of the application vector table.
+ */
+typedef struct {
+    uint32_t  Initial_SP;
+    void     (*Reset_Handler)(void);
+} AppVecTable_t;
+
+void SIGMA_Boot_JumpToApplication(uint32_t app_address)
+{
+    AppVecTable_t *app = (AppVecTable_t *)app_address;
+
+    __disable_irq();
+    SysTick->CTRL = 0;
+    HAL_RCC_DeInit();
+
+    for (uint8_t i = 0; i < sizeof(NVIC->ICER)/sizeof(NVIC->ICER[0]); i++)
+    {
+        NVIC->ICER[i] = 0xFFFFFFFF;
+        NVIC->ICPR[i] = 0xFFFFFFFF;
+    }
+
+    __enable_irq();
+    __set_MSP(app->Initial_SP);
+    app->Reset_Handler();
+}
+
+#endif /* SRC_FLASH_IF_C_ */

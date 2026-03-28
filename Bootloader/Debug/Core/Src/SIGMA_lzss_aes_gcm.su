@@ -1,0 +1,2 @@
+SIGMA_lzss_aes_gcm.c:32:15:SIGMA_Read_Byte	48	static
+SIGMA_lzss_aes_gcm.c:97:12:SIGMA_Decrypt_DecomprToFlash	480	static

@@ -27,7 +27,7 @@ def aes_gcm_encrypt(data: bytes):
     return iv, encrypted, tag
 
 if __name__ == "__main__":
-    from compress import lzss_compress, lzss_decompress
+    from SIGMA_compress import lzss_compress, lzss_decompress
     
     APP_BIN = r"C:\Users\HP\Documents\work_space\Embedded_Secure_Encryp_Comp\Application\Debug\Application.bin"  # ← زيد هاد السطر
     

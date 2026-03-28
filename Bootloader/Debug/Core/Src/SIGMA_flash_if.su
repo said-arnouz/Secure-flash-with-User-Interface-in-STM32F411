@@ -1,0 +1,9 @@
+SIGMA_flash_if.c:25:17:SIGMA_Flash_GetSector	16	static
+SIGMA_flash_if.c:44:10:SIGMA_UART_ReadExact	32	static
+SIGMA_flash_if.c:59:6:SIGMA_Boot_SendAck	16	static
+SIGMA_flash_if.c:68:6:SIGMA_Boot_SendErr	16	static
+SIGMA_flash_if.c:87:6:SIGMA_Boot_HandleFlash	64	static
+SIGMA_flash_if.c:140:16:SIGMA_Flash_Erase	56	static
+SIGMA_flash_if.c:172:16:SIGMA_Flash_Write	40	static
+SIGMA_flash_if.c:206:16:SIGMA_Flash_Read	32	static
+SIGMA_flash_if.c:224:6:SIGMA_Boot_JumpToApplication	32	static,ignoring_inline_asm

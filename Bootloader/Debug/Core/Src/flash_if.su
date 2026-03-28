@@ -1,9 +1,0 @@
-flash_if.c:25:17:Flash_GetSector	16	static
-flash_if.c:44:10:UART_ReadExact	32	static
-flash_if.c:59:6:Boot_SendAck	16	static
-flash_if.c:68:6:Boot_SendErr	16	static
-flash_if.c:87:6:Boot_HandleFlash	64	static
-flash_if.c:140:16:Flash_Erase	56	static
-flash_if.c:172:16:Flash_Write	40	static
-flash_if.c:206:16:Flash_Read	32	static
-flash_if.c:224:6:Boot_JumpToApplication	32	static,ignoring_inline_asm
